@@ -1,0 +1,111 @@
+
+Standard C doesn't define binary constants. There's a GNU (I believe) extension though (among popular compilers, clang adapts it as well): the 0b prefix:
+
+int foo = 0b1010;
+
+
+If you want to stick with standard C, then there's an option: you can combine a macro and a function to create an almost readable "binary constant" feature:
+
+#define B(x) S_to_binary_(#x)
+
+static inline unsigned long long S_to_binary_(const char *s)
+{
+        unsigned long long i = 0;
+        while (*s) {
+                i <<= 1;
+                i += *s++ - '0';
+        }
+        return i;
+}
+
+
+And then you can use it like this:
+
+int foo = B(1010);
+
+
+If you turn on heavy compiler optimizations, the compiler will most likely eliminate the function call completely (constant folding) or will at least inline it, so this won't even be a performance issue.
+
+Proof:
+
+The following code:
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <limits.h>
+#include <string.h>
+
+
+#define B(x) S_to_binary_(#x)
+
+static inline unsigned long long S_to_binary_(const char *s)
+{
+    unsigned long long i = 0;
+    while (*s) {
+        i <<= 1;
+        i += *s++ - '0';
+    }
+    return i;
+}
+
+int main()
+{
+    int foo = B(001100101);
+
+    printf("%d\n", foo);
+
+    return 0;
+}
+
+
+has been compiled using clang -o baz.S baz.c -Wall -O3 -S, and it produced the following assembly:
+
+    .section    __TEXT,__text,regular,pure_instructions
+    .globl  _main
+    .align  4, 0x90
+_main:                                  ## @main
+    .cfi_startproc
+## BB#0:
+    pushq   %rbp
+Ltmp2:
+    .cfi_def_cfa_offset 16
+Ltmp3:
+    .cfi_offset %rbp, -16
+    movq    %rsp, %rbp
+Ltmp4:
+    .cfi_def_cfa_register %rbp
+    leaq    L_.str1(%rip), %rdi
+    movl    $101, %esi               ## <= This line!
+    xorb    %al, %al
+    callq   _printf
+    xorl    %eax, %eax
+    popq    %rbp
+    ret
+    .cfi_endproc
+
+    .section    __TEXT,__cstring,cstring_literals
+L_.str1:                                ## @.str1
+    .asciz   "%d\n"
+
+
+.subsections_via_symbols
+
+
+So clang completely eliminated the call to the function, and replaced its return value with 101. Neat, huh?
+    
+Prefix you literal with 0b like in
+
+int i = 0b11111111;
+
+
+See here.
+    
+Use BOOST_BINARY (Yes, you can use it in C). 
+
+#include <boost/utility/binary.hpp>
+...
+int bin = BOOST_BINARY(110101);
+
+
+This macro is expanded to an octal literal during preprocessing.
+    
